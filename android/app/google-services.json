@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "885187906304",
+    "project_id": "sugumarjagadeesh45reals2chat",
+    "storage_bucket": "sugumarjagadeesh45reals2chat.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:885187906304:android:65d5192be5a4ee1cb401e5",
+        "android_client_info": {
+          "package_name": "com.sugumarjagadeesh45.reals2chat"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "885187906304-0nlcve4r6q8rhusdrrllbf51ofo02inv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sugumarjagadeesh45.reals2chat",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "885187906304-gt91ibpeqgbqpc991phkkntkjjnp8ui0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCerhA84rg0d5jSLZH8EjxGNuZ1POuxCxo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "885187906304-gt91ibpeqgbqpc991phkkntkjjnp8ui0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
