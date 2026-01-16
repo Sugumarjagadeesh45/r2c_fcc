@@ -36,6 +36,29 @@ const MessagerProfile = () => {
     followingCount: 0
   });
 
+  // Helper functions for avatar fallback
+  const getUserInitials = (name) => {
+    if (!name) return 'U';
+    const nameParts = name.split(' ');
+    if (nameParts.length >= 2) {
+      return `${nameParts[0].charAt(0)}${nameParts[1].charAt(0)}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const getAvatarColor = (name) => {
+    if (!name) return '#6C63FF';
+    const colors = [
+      '#6C63FF', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', 
+      '#FECA57', '#FF9FF3', '#54A0FF', '#48DBFB', '#00D2D3'
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
+
   // Log component mount and route parameters
   useEffect(() => {
     console.log('=== MessagerProfile Component Mounted ===');
@@ -137,7 +160,7 @@ const MessagerProfile = () => {
     
     if (imageError) {
       console.log('Image error occurred, using default avatar');
-      return 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
+      return null;
     }
     
     // Check all possible locations for the image, including nested user object
@@ -156,7 +179,7 @@ const MessagerProfile = () => {
     
     console.log('Selected image URI:', uri || 'Using default avatar');
     
-    if (!uri) return 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
+    if (!uri) return null;
 
     if (uri.startsWith('http') || uri.startsWith('data:') || uri.startsWith('file:')) {
       return uri;
@@ -231,14 +254,20 @@ const MessagerProfile = () => {
           {/* Profile Card */}
           <View style={styles.profileCard}>
             <View style={styles.avatarContainer}>
-              <Image 
-                source={{ uri: getProfileImageUri() }} 
-                style={styles.avatar} 
-                onError={() => {
-                  console.log('Image loading error occurred');
-                  setImageError(true);
-                }}
-              />
+              {getProfileImageUri() ? (
+                <Image 
+                  source={{ uri: getProfileImageUri() }} 
+                  style={styles.avatar} 
+                  onError={() => {
+                    console.log('Image loading error occurred');
+                    setImageError(true);
+                  }}
+                />
+              ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: getAvatarColor(profileData?.name) }]}>
+                  <Text style={styles.avatarInitials}>{getUserInitials(profileData?.name)}</Text>
+                </View>
+              )}
               <View style={[
                 styles.onlineIndicator, 
                 { backgroundColor: profileData?.isOnline ? '#25D366' : '#8696A0' }
@@ -394,6 +423,15 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.1)',
+  },
+  avatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitials: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    color: '#FFF',
   },
   onlineIndicator: {
     position: 'absolute',

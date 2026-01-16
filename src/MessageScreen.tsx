@@ -289,7 +289,10 @@ const MessageScreen = () => {
           avatar: initialUser.avatar || initialUser.profilePicture || initialUser.photoURL,
         });
         setFetchingUser(false);
-      } else if (targetId) {
+      }
+
+      // Always fetch fresh profile data to ensure we have the correct avatar/info
+      if (targetId) {
         try {
           const token = await AsyncStorage.getItem('authToken');
           const response = await fetch(`${API_URL}/api/user/profile/${targetId}`, {
@@ -297,10 +300,11 @@ const MessageScreen = () => {
           });
           const data = await response.json();
           if (data.success) {
-            setOtherUser({
+            setOtherUser(prev => ({
+              ...(prev || {}),
               ...data.data,
               avatar: data.data.avatar || data.data.profilePicture || data.data.photoURL,
-            });
+            }));
           }
         } catch (e) {
           console.error(e);
