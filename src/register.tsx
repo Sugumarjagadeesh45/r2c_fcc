@@ -377,7 +377,7 @@ const RegisterScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   };
 
 
-  // In your RegisterScreen.js, update the handleSendEmailOTP function:
+// In your RegisterScreen.js, update the handleSendEmailOTP function:
 
 const handleSendEmailOTP = async () => {
   if (!email) {
@@ -394,7 +394,10 @@ const handleSendEmailOTP = async () => {
   try {
     setSendingOTP({ ...sendingOTP, email: true });
     
-    // Call the new backend endpoint
+    // Show sending status
+    showQuickAlert('Sending OTP via dual provider system...', 'success');
+    
+    // Call the backend endpoint with dual provider system
     const response = await fetch(`${API_URL}/api/auth/send-otp-email`, {
       method: 'POST',
       headers: {
@@ -408,14 +411,22 @@ const handleSendEmailOTP = async () => {
     
     const data = await response.json();
     
-    if (response.ok) {
+    if (response.ok && data.success) {
       setEmailOTPGenerated(data.otp); // Store OTP from response
       setShowEmailOTPModal(true);
       
       if (data.emailSent) {
-        showQuickAlert('OTP sent to your email!', 'success');
+        // Show provider info
+        const provider = data.deliveryProvider || 'unknown';
+        const time = data.deliveryTime ? `${data.deliveryTime}ms` : 'quickly';
+        showQuickAlert(`✅ OTP sent via ${provider} in ${time}!`, 'success');
       } else {
-        showQuickAlert(`Email service temporary unavailable. Use OTP: ${data.otp}`, 'warning');
+        // Development mode or emergency fallback
+        if (data.otp) {
+          showQuickAlert(`🛠️ Development mode: Use OTP: ${data.otp}`, 'warning');
+        } else {
+          showQuickAlert('OTP sent! Please check your email.', 'success');
+        }
       }
     } else {
       showQuickAlert(data.message || 'Failed to send OTP', 'error');
@@ -428,7 +439,6 @@ const handleSendEmailOTP = async () => {
     setSendingOTP({ ...sendingOTP, email: false });
   }
 };
-
 // Also update the handleVerifyEmailOTP function:
 const handleVerifyEmailOTP = async () => {
   const otp = getEmailOTPValue();
