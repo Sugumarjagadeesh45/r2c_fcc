@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -42,8 +41,6 @@ import {
   getFCMToken, 
   setupNotificationListeners, 
   setupNotificationTapHandler
-  
-  
 } from './src/services/pushNotificationHelper';
 
 // Import socket service
@@ -124,6 +121,7 @@ const AppNavigator = () => {
   const { user, loading } = useUser();
   const navigationRef = useRef(null);
   const [fcmInitialized, setFcmInitialized] = useState(false);
+  const [locationPermissionGranted, setLocationPermissionGranted] = useState(true);
   const appState = useRef(AppState.currentState);
 
   // Initialize FCM and Socket when user logs in
@@ -193,24 +191,30 @@ const AppNavigator = () => {
     console.log('[APP] 📍 Initializing Location Tracking...');
     let locationInterval;
 
-    const sendLocation = async () => {
-      if (!user) return;
-
-      // Check Android permissions first to avoid infinite loops/crashes
+    const checkLocationPermission = async () => {
       if (Platform.OS === 'android') {
         try {
           const granted = await PermissionsAndroid.check(
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
           );
           if (!granted) {
-            console.log('[APP] 🚫 Location permission not granted. Skipping update.');
-            return;
+            console.log('[APP] 🚫 Location permission not granted.');
+            setLocationPermissionGranted(false);
+            return false;
           }
+          setLocationPermissionGranted(true);
+          return true;
         } catch (err) {
           console.warn('[APP] Error checking location permission:', err);
-          return;
+          setLocationPermissionGranted(false);
+          return false;
         }
       }
+      return true; // For iOS, we'll handle permissions in the component
+    };
+
+    const sendLocation = async () => {
+      if (!user || !locationPermissionGranted) return;
 
       Geolocation.getCurrentPosition(
         (position) => {
@@ -223,6 +227,7 @@ const AppNavigator = () => {
         (error) => {
           if (error.code === 1) {
             console.log('[APP] 🚫 Location permission denied (Error 1).');
+            setLocationPermissionGranted(false);
           } else {
             console.log('Location error:', error.code, error.message);
           }
@@ -232,11 +237,16 @@ const AppNavigator = () => {
     };
 
     if (user) {
-      // 1. Send immediately on open/login
-      sendLocation();
+      // Check permission first
+      checkLocationPermission().then(hasPermission => {
+        if (hasPermission) {
+          // 1. Send immediately on open/login
+          sendLocation();
 
-      // 2. Send every 60 seconds
-      locationInterval = setInterval(sendLocation, 60000);
+          // 2. Send every 60 seconds
+          locationInterval = setInterval(sendLocation, 60000);
+        }
+      });
 
       // 3. Handle App State Changes (Foreground/Background)
       const subscription = AppState.addEventListener('change', nextAppState => {
@@ -244,8 +254,12 @@ const AppNavigator = () => {
           appState.current.match(/inactive|background/) &&
           nextAppState === 'active'
         ) {
-          console.log('App has come to the foreground! Sending location...');
-          sendLocation();
+          console.log('App has come to the foreground! Checking location permission...');
+          checkLocationPermission().then(hasPermission => {
+            if (hasPermission) {
+              sendLocation();
+            }
+          });
         }
         appState.current = nextAppState;
       });
@@ -255,7 +269,7 @@ const AppNavigator = () => {
         subscription.remove();
       };
     }
-  }, [user]);
+  }, [user, locationPermissionGranted]);
 
   if (loading) {
     return (

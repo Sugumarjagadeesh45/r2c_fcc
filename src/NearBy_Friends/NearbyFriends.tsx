@@ -12,7 +12,10 @@ import {
   Platform,
   AppState,
   InteractionManager,
-  Image
+  Image,
+  Linking,
+  Modal,
+  Dimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
@@ -24,6 +27,121 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import API_URL from '../utiliti/config';
 import Geolocation from '@react-native-community/geolocation';
 
+// Add this custom alert component at the top of your file
+const LocationPermissionAlert = ({ visible, onClose, onOpenSettings }) => {
+  return (
+    <Modal
+      transparent={true}
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={alertStyles.overlay}>
+        <View style={alertStyles.container}>
+          <View style={alertStyles.iconContainer}>
+            <Icon name="location-off" size={40} color="#FF5252" />
+          </View>
+          
+          <Text style={alertStyles.title}>Location is turned off</Text>
+          
+          <Text style={alertStyles.message}>
+            Live location is unavailable. Nearby friends cannot be found unless location permission is enabled.
+          </Text>
+          
+          <View style={alertStyles.buttonContainer}>
+            <TouchableOpacity 
+              style={[alertStyles.button, alertStyles.cancelButton]} 
+              onPress={onClose}
+            >
+              <Text style={alertStyles.cancelButtonText}>CANCEL</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[alertStyles.button, alertStyles.settingsButton]} 
+              onPress={onOpenSettings}
+            >
+              <Text style={alertStyles.settingsButtonText}>SETTINGS</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const alertStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    width: Dimensions.get('window').width * 0.85,
+    backgroundColor: theme.background,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 82, 82, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.textPrimary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  message: {
+    fontSize: 16,
+    color: theme.textSecondary,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-between',
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginRight: 8,
+  },
+  settingsButton: {
+    backgroundColor: theme.accentColor,
+    marginLeft: 8,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.textPrimary,
+  },
+  settingsButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+});
+
 export default function NearbyFriends() {
   const navigation = useNavigation();
   const [users, setUsers] = useState([]);
@@ -33,6 +151,8 @@ export default function NearbyFriends() {
   const [mapRegion, setMapRegion] = useState(null);
   const [locationUpdateStatus, setLocationUpdateStatus] = useState('Initializing...');
   const [isLocationOff, setIsLocationOff] = useState(false);
+  const [showLocationAlert, setShowLocationAlert] = useState(false);
+  const [locationPermissionChecked, setLocationPermissionChecked] = useState(false);
   const mapRef = useRef(null);
   const appState = useRef(AppState.currentState);
 
@@ -50,9 +170,9 @@ export default function NearbyFriends() {
       checkPermissionAndStart();
     });
 
-    // 2. Set up interval to update location every minute
+    // 2. Set up interval to update location every minute - only if permission is granted
     const intervalId = setInterval(() => {
-      if (appState.current === 'active' && !isLocationOff) {
+      if (appState.current === 'active' && !isLocationOff && locationPermissionChecked) {
         updateLocationAndFetchUsers(true); // silent update
       }
     }, 60000); // 1 minute
@@ -74,35 +194,33 @@ export default function NearbyFriends() {
       clearInterval(intervalId);
       subscription.remove();
     };
-  }, []);
+  }, [isLocationOff, locationPermissionChecked]);
 
   const checkPermissionAndStart = async () => {
     if (Platform.OS === 'android') {
       try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Location Permission',
-            message: 'This app needs access to your location to show nearby friends.',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
+        const granted = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
         );
         
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+        if (granted) {
           setIsLocationOff(false);
+          setLocationPermissionChecked(true);
           updateLocationAndFetchUsers();
         } else {
           console.log('Location permission denied');
           setIsLocationOff(true);
+          setLocationPermissionChecked(true);
           setLocationUpdateStatus('Permission denied');
         }
       } catch (err) {
         console.warn('Permission Error:', err);
         setIsLocationOff(true);
+        setLocationPermissionChecked(true);
       }
     } else {
+      // For iOS, we'll try to get location and handle permission denial in the error callback
+      setLocationPermissionChecked(true);
       updateLocationAndFetchUsers();
     }
   };
@@ -117,7 +235,7 @@ export default function NearbyFriends() {
         (error) => {
           console.log(`High accuracy error: ${error.code} - ${error.message}`);
           // Error Code 3 is TIMEOUT. If high accuracy fails, try low accuracy (Network)
-          if (error.code === 3 || error.code === 2 || error.code === 1) {
+          if (error.code === 3 || error.code === 2) {
             console.log('Retrying with low accuracy...');
             Geolocation.getCurrentPosition(
               (position) => resolve(position.coords),
@@ -134,6 +252,12 @@ export default function NearbyFriends() {
   };
 
   const updateLocationAndFetchUsers = async (silent = false) => {
+    // Check if location is off before proceeding
+    if (isLocationOff) {
+      if (!silent) setShowLocationAlert(true);
+      return;
+    }
+
     if (!silent) setLoading(true);
     setError(null);
 
@@ -203,10 +327,14 @@ export default function NearbyFriends() {
     } catch (err) {
       console.error('Error in update cycle:', err);
       if (!silent) {
-        if (err.code === 1 || err.code === 2 || err.code === 3) {
-          // Location specific errors
+        if (err.code === 1) {
+          // Permission denied
           setIsLocationOff(true);
           setLocationUpdateStatus('Location unavailable');
+          setShowLocationAlert(true);
+        } else if (err.code === 2 || err.code === 3) {
+          // Other location errors
+          setError('Unable to get your location. Please check your GPS settings.');
         } else {
           setError(err.message);
         }
@@ -252,12 +380,14 @@ export default function NearbyFriends() {
     }
   };
 
-  const showLocationOffInfo = () => {
-    Alert.alert(
-      "Location is turned off",
-      "Live location is not available, so nearby friends cannot be found.",
-      [{ text: "OK" }]
-    );
+  const openAppSettings = () => {
+    setShowLocationAlert(false);
+    
+    if (Platform.OS === 'ios') {
+      Linking.openURL('app-settings:');
+    } else {
+      Linking.openSettings();
+    }
   };
 
   const renderMap = () => {
@@ -371,7 +501,7 @@ export default function NearbyFriends() {
             <View style={styles.headerTitle}>
               {isLocationOff ? (
                 <TouchableOpacity 
-                  onPress={showLocationOffInfo} 
+                  onPress={() => setShowLocationAlert(true)} 
                   style={styles.locationOffBadge}
                   activeOpacity={0.7}
                 >
@@ -454,6 +584,14 @@ export default function NearbyFriends() {
                         ? "Searching for nearby users..." 
                         : "No nearby users found."}
                   </Text>
+                  {isLocationOff && (
+                    <TouchableOpacity 
+                      style={styles.enableLocationButton}
+                      onPress={() => setShowLocationAlert(true)}
+                    >
+                      <Text style={styles.enableLocationButtonText}>Enable Location</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
 
@@ -467,6 +605,13 @@ export default function NearbyFriends() {
           </View>
         </View>
       </LinearGradient>
+      
+      {/* Custom Location Permission Alert */}
+      <LocationPermissionAlert
+        visible={showLocationAlert}
+        onClose={() => setShowLocationAlert(false)}
+        onOpenSettings={openAppSettings}
+      />
     </SafeAreaView>
   );
 }
@@ -715,7 +860,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     fontSize: 16,
-  }
+  },
+  enableLocationButton: {
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: theme.accentColor,
+    borderRadius: 20,
+  },
+  enableLocationButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
 });
 
 export default NearbyFriends;
