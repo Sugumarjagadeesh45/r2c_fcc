@@ -1,24 +1,67 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  StatusBar, 
-  TouchableOpacity, 
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  StatusBar,
+  View,
+  Text,
+  TouchableOpacity,
   FlatList,
   ScrollView,
   Alert,
   ActivityIndicator,
   RefreshControl,
-  Image
+  Image,
+  Animated,
+  Easing,
+  StyleSheet,
+  Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { theme } from '../styles/theme';
+
+// Import Icon component properly - adjust this path based on your project structure
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API_URL from './utiliti/config';
+import Geolocation from '@react-native-community/geolocation';
+
+// Create a simple Icon component wrapper
+const Icon = ({ name, size, color, style }) => {
+  // Map icon names to MaterialIcons names
+  const iconMap = {
+    'people': 'people',
+    'warning': 'warning',
+    'location-off': 'location-off',
+    'search': 'search',
+    'mail': 'mail',
+    'person-add': 'person-add',
+    'check': 'check',
+    'close': 'close',
+    'chat': 'chat',
+    'schedule': 'schedule',
+    'notifications': 'notifications',
+    'error-outline': 'error-outline',
+    'print': 'print',
+    'people-outline': 'people-outline',
+    'person-search': 'person-search',
+    'mail-outline': 'mail-outline',
+    'location-on': 'location-on',
+    'star': 'star'
+  };
+
+  const iconName = iconMap[name] || name;
+
+  return (
+    <MaterialIcons 
+      name={iconName} 
+      size={size} 
+      color={color} 
+      style={style}
+    />
+  );
+};
 
 const FriendsScreen = () => {
   const navigation = useNavigation();
@@ -32,6 +75,54 @@ const FriendsScreen = () => {
   const [apiError, setApiError] = useState(false);
   const [activeTab, setActiveTab] = useState('friends'); // 'friends', 'suggestions', 'requests'
   const [imageErrors, setImageErrors] = useState({});
+  
+  // Location Status
+  const [isLocationOff, setIsLocationOff] = useState(false);
+  const blinkAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const checkLocation = () => {
+      Geolocation.getCurrentPosition(
+        () => setIsLocationOff(false),
+        (error) => {
+          // Error code 2: POSITION_UNAVAILABLE, 1: PERMISSION_DENIED
+          if (error.code === 2 || error.code === 1) {
+            setIsLocationOff(true);
+          }
+        },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 10000 }
+      );
+    };
+
+    checkLocation();
+    // Check periodically
+    const interval = setInterval(checkLocation, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (isLocationOff) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(blinkAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(blinkAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      blinkAnim.setValue(0);
+    }
+  }, [isLocationOff]);
+
+  const handleLocationWarningPress = () => {
+    Alert.alert(
+      "Location is turned off",
+      "Live location is not available, so nearby friends cannot be found.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Settings", onPress: () => Linking.openSettings() }
+      ]
+    );
+  };
 
   // Function to log all friends' complete data
   const logAllFriendsData = useCallback(() => {
@@ -206,7 +297,7 @@ const FriendsScreen = () => {
         setFriends([]);
       }
 
-      // Fetch friend suggestions
+      // Fetch friend suggestions - with error handling
       try {
         const suggestionsResponse = await fetch(`${API_URL}/api/friends/suggestions`, { 
           method: 'GET', 
@@ -225,6 +316,13 @@ const FriendsScreen = () => {
           setAddFriends(suggestionsData.suggestions || []);
         } else {
           console.error('Failed to fetch suggestions:', suggestionsResponse.status, suggestionsResponse.statusText);
+          // Try to get more details about the error
+          try {
+            const errorData = await suggestionsResponse.json();
+            console.error('Suggestions error details:', errorData);
+          } catch (e) {
+            console.error('Could not parse error response');
+          }
           setAddFriends([]);
         }
       } catch (error) {
@@ -622,6 +720,16 @@ const FriendsScreen = () => {
             <View style={styles.logoContainer}>
               <Icon name="people" size={22} color={theme.accentColor} />
               <Text style={styles.logo}>REELS2CHAT</Text>
+              
+              {isLocationOff && (
+                <TouchableOpacity onPress={handleLocationWarningPress} style={{ marginLeft: 10 }}>
+                  <Animated.View style={{ opacity: blinkAnim, flexDirection: 'row', alignItems: 'center' }}>
+                    <Icon name="warning" size={14} color="#FFC107" />
+                    <Icon name="location-off" size={14} color="#FF5252" style={{ marginLeft: 2 }} />
+                  </Animated.View>
+                </TouchableOpacity>
+              )}
+              
             </View>
             <View style={styles.headerIcons}>
               <TouchableOpacity 
@@ -1307,7 +1415,8 @@ export default FriendsScreen;
 //   ScrollView,
 //   Alert,
 //   ActivityIndicator,
-//   RefreshControl
+//   RefreshControl,
+//   Image
 // } from 'react-native';
 // import { SafeAreaView } from 'react-native-safe-area-context';
 // import LinearGradient from 'react-native-linear-gradient';
@@ -1328,6 +1437,42 @@ export default FriendsScreen;
 //   const [refreshing, setRefreshing] = useState(false);
 //   const [apiError, setApiError] = useState(false);
 //   const [activeTab, setActiveTab] = useState('friends'); // 'friends', 'suggestions', 'requests'
+//   const [imageErrors, setImageErrors] = useState({});
+
+//   // Function to log all friends' complete data
+//   const logAllFriendsData = useCallback(() => {
+//     console.log('===== ALL FRIENDS DATA =====');
+//     console.log(`Total Friends Count: ${friends.length}`);
+    
+//     if (friends.length > 0) {
+//       friends.forEach((friend, index) => {
+//         console.log(`\n--- Friend #${index + 1} ---`);
+//         console.log('Complete friend object:', friend);
+        
+//         // Extract user info
+//         const userName = friend.name || friend.username || 'Unknown Friend';
+//         const userStatus = friend.status || friend.bio || 'Friend';
+        
+//         // Get avatar URL using the helper function
+//         const avatarUrl = getAvatarUrl(friend);
+        
+//         console.log(`Friend ID: ${friend.id || friend._id}`);
+//         console.log(`Friend Name: ${userName}`);
+//         console.log(`Friend Status/Bio: ${userStatus}`);
+//         console.log(`Friend Avatar URL: ${avatarUrl}`);
+        
+//         // Log all available fields
+//         console.log('All available fields:');
+//         Object.keys(friend).forEach(key => {
+//           console.log(`  ${key}: ${friend[key]}`);
+//         });
+//       });
+//     } else {
+//       console.log('No friends found');
+//     }
+    
+//     console.log('===== END OF FRIENDS DATA =====\n');
+//   }, [friends]);
 
 //   // Generate user initials for display
 //   const getUserInitials = (name) => {
@@ -1353,10 +1498,44 @@ export default FriendsScreen;
 //     return colors[Math.abs(hash) % colors.length];
 //   };
 
+//   // Helper function to get avatar URL - updated according to backend notes
+//   const getAvatarUrl = (userObj) => {
+//     if (!userObj) return null;
+    
+//     // Check all possible locations for the image
+//     const candidates = [
+//       userObj.avatar,
+//       userObj.profilePicture,
+//       userObj.photoURL,
+//       userObj.avatarUrl,
+//       userObj.profilePic,
+//       userObj.user?.avatar,
+//       userObj.user?.profilePicture,
+//       userObj.user?.photoURL,
+//       userObj.friend?.avatar,
+//       userObj.friend?.profilePicture,
+//       userObj.friend?.photoURL
+//     ];
+
+//     const uri = candidates.find(c => c && typeof c === 'string' && c.length > 0);
+    
+//     if (!uri) return null;
+    
+//     // Return absolute URLs as is
+//     if (uri.startsWith('http') || uri.startsWith('data:') || uri.startsWith('file:')) {
+//       return uri;
+//     }
+    
+//     // Handle relative paths (prepend API_URL)
+//     const cleanPath = uri.startsWith('/') ? uri.substring(1) : uri;
+//     return `${API_URL}/${cleanPath}`;
+//   };
+
 //   // Refresh data function
 //   const fetchFriendsData = useCallback(async () => {
 //     setRefreshing(true);
 //     setApiError(false);
+//     setImageErrors({});
     
 //     try {
 //       const token = await AsyncStorage.getItem('authToken');
@@ -1383,7 +1562,47 @@ export default FriendsScreen;
 //             count: friendsData.friends?.length || 0,
 //             firstFriend: friendsData.friends?.[0]
 //           });
-//           setFriends(friendsData.friends || []);
+          
+//           // Make sure we're setting the friends array correctly
+//           let friendsArray = friendsData.friends || [];
+
+//           // Workaround: Fetch full profile for friends to get avatar if missing
+//           // This ensures we have the avatar even if /api/friends doesn't return it
+//           if (friendsArray.length > 0) {
+//             const enrichedFriends = await Promise.all(friendsArray.map(async (friend) => {
+//               // Check if we already have a valid avatar
+//               const hasAvatar = friend.avatar || friend.photoURL || friend.profilePicture;
+//               if (hasAvatar) return friend;
+              
+//               // If not, fetch full profile
+//               try {
+//                 const targetId = friend.id || friend._id;
+//                 if (!targetId) return friend;
+                
+//                 const profileResponse = await fetch(`${API_URL}/api/user/profile/${targetId}`, {
+//                   method: 'GET',
+//                   headers: {
+//                     'Content-Type': 'application/json',
+//                     Authorization: `Bearer ${token}`,
+//                   },
+//                 });
+                
+//                 if (profileResponse.ok) {
+//                   const profileData = await profileResponse.json();
+//                   if (profileData.success && profileData.data) {
+//                     // Merge the full profile data
+//                     return { ...friend, ...profileData.data };
+//                   }
+//                 }
+//               } catch (err) {
+//                 console.log('Error enriching friend data:', err);
+//               }
+//               return friend;
+//             }));
+//             friendsArray = enrichedFriends;
+//           }
+
+//           setFriends(friendsArray);
 //         } else {
 //           console.error('Failed to fetch friends:', friendsResponse.status, friendsResponse.statusText);
 //           setFriends([]);
@@ -1602,20 +1821,39 @@ export default FriendsScreen;
 
 //   // --- Render Functions ---
 //   const renderFriend = ({ item, index }) => {
-//     // Extract user info
-//     const userObj = item.user || item;
+//     // For friends, the item is already the user object
+//     const userObj = item.friend || item.user || item;
 //     const userId = userObj.id || userObj._id || `friend-${index}`;
 //     const userName = userObj.name || userObj.username || 'Unknown Friend';
 //     const userStatus = userObj.status || userObj.bio || 'Friend';
 //     const userInitials = getUserInitials(userName);
 //     const avatarColor = getAvatarColor(userName);
     
+//     // Get avatar URL using the helper function
+//     let avatarUrl = getAvatarUrl(userObj);
+//     // Fallback: if extracted userObj doesn't have avatar, check the root item
+//     if (!avatarUrl && userObj !== item) {
+//       avatarUrl = getAvatarUrl(item);
+//     }
+//     const showImage = avatarUrl && !imageErrors[userId];
+    
 //     return (
 //       <View style={styles.friendItem}>
 //         <TouchableOpacity onPress={() => handleViewProfile(item)} style={styles.avatarContainer}>
-//           <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
-//             <Text style={styles.avatarText}>{userInitials}</Text>
-//           </View>
+//           {showImage ? (
+//             // Show actual profile picture if available
+//             <Image 
+//               key={avatarUrl} // Force re-render if URL changes
+//               source={{ uri: avatarUrl }} 
+//               style={styles.avatarImage}
+//               onError={() => setImageErrors(prev => ({ ...prev, [userId]: true }))}
+//             />
+//           ) : (
+//             // Show initials-based avatar if no profile picture
+//             <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
+//               <Text style={styles.avatarText}>{userInitials}</Text>
+//             </View>
+//           )}
 //         </TouchableOpacity>
 //         <View style={styles.friendInfo}>
 //           <TouchableOpacity onPress={() => handleViewProfile(item)}>
@@ -1636,19 +1874,38 @@ export default FriendsScreen;
 
 //   const renderSuggestion = ({ item, index }) => {
 //     // Extract user info
-//     const userObj = item.user || item;
+//     const userObj = item.user || item.friend || item;
 //     const userId = userObj.id || userObj._id || `suggestion-${index}`;
 //     const userName = userObj.name || userObj.username || 'Unknown User';
 //     const userStatus = userObj.status || userObj.bio || 'Suggested Friend';
 //     const userInitials = getUserInitials(userName);
 //     const avatarColor = getAvatarColor(userName);
     
+//     // Get avatar URL using the helper function
+//     let avatarUrl = getAvatarUrl(userObj);
+//     // Fallback: if extracted userObj doesn't have avatar, check the root item
+//     if (!avatarUrl && userObj !== item) {
+//       avatarUrl = getAvatarUrl(item);
+//     }
+//     const showImage = avatarUrl && !imageErrors[userId];
+    
 //     return (
 //       <View style={styles.friendItem}>
 //         <TouchableOpacity onPress={() => handleViewProfile(item)} style={styles.avatarContainer}>
-//           <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
-//             <Text style={styles.avatarText}>{userInitials}</Text>
-//           </View>
+//           {showImage ? (
+//             // Show actual profile picture if available
+//             <Image 
+//               key={avatarUrl}
+//               source={{ uri: avatarUrl }} 
+//               style={styles.avatarImage}
+//               onError={() => setImageErrors(prev => ({ ...prev, [userId]: true }))}
+//             />
+//           ) : (
+//             // Show initials-based avatar if no profile picture
+//             <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
+//               <Text style={styles.avatarText}>{userInitials}</Text>
+//             </View>
+//           )}
 //         </TouchableOpacity>
 //         <View style={styles.friendInfo}>
 //           <TouchableOpacity onPress={() => handleViewProfile(item)}>
@@ -1684,19 +1941,38 @@ export default FriendsScreen;
 
 //   const renderRequest = ({ item, index }) => {
 //     // Request items often contain the user inside 'fromUser' or 'user'
-//     const userObj = item.fromUser || item.user || item;
+//     const userObj = item.fromUser || item.user || item.friend || item;
 //     const userId = userObj.id || userObj._id || `request-${index}`;
 //     const userName = userObj.name || userObj.username || 'Unknown User';
 //     const userBio = userObj.bio || userObj.status || 'Wants to connect with you';
 //     const userInitials = getUserInitials(userName);
 //     const avatarColor = getAvatarColor(userName);
     
+//     // Get avatar URL using the helper function
+//     let avatarUrl = getAvatarUrl(userObj);
+//     // Fallback: if extracted userObj doesn't have avatar, check the root item
+//     if (!avatarUrl && userObj !== item) {
+//       avatarUrl = getAvatarUrl(item);
+//     }
+//     const showImage = avatarUrl && !imageErrors[userId];
+    
 //     return (
 //       <View style={styles.requestItem}>
 //         <TouchableOpacity onPress={() => handleViewProfile(item)} style={styles.avatarContainer}>
-//           <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
-//             <Text style={styles.avatarText}>{userInitials}</Text>
-//           </View>
+//           {showImage ? (
+//             // Show actual profile picture if available
+//             <Image 
+//               key={avatarUrl}
+//               source={{ uri: avatarUrl }} 
+//               style={styles.avatarImage}
+//               onError={() => setImageErrors(prev => ({ ...prev, [userId]: true }))}
+//             />
+//           ) : (
+//             // Show initials-based avatar if no profile picture
+//             <View style={[styles.avatarCircle, { backgroundColor: avatarColor }]}>
+//               <Text style={styles.avatarText}>{userInitials}</Text>
+//             </View>
+//           )}
 //         </TouchableOpacity>
 //         <View style={styles.requestInfo}>
 //           <TouchableOpacity onPress={() => handleViewProfile(item)}>
@@ -1863,16 +2139,20 @@ export default FriendsScreen;
 //                       <Icon name="people" size={16} color={theme.accentColor} style={styles.sectionTitleIcon} />
 //                       <Text style={styles.sectionTitleText}>My Friends</Text>
 //                     </View>
-//                     <TouchableOpacity onPress={() => navigation.navigate('AllFriends')}>
-//                       <Text style={styles.seeAllText}>See All</Text>
-//                     </TouchableOpacity>
+//                     <View style={styles.headerIcons}>
+//                       <TouchableOpacity onPress={logAllFriendsData}>
+//                         <Icon name="print" size={18} color={theme.accentColor} />
+//                       </TouchableOpacity>
+//                       <TouchableOpacity onPress={() => navigation.navigate('AllFriends')}>
+//                         <Text style={styles.seeAllText}>See All</Text>
+//                       </TouchableOpacity>
+//                     </View>
 //                   </View>
 //                   <FlatList
 //                     data={friends}
 //                     renderItem={renderFriend}
 //                     keyExtractor={(item, index) => {
-//                       const userObj = item.user || item;
-//                       return userObj.id?.toString() || userObj._id?.toString() || `friend-${index}`;
+//                       return item.id?.toString() || item._id?.toString() || `friend-${index}`;
 //                     }}
 //                     scrollEnabled={false}
 //                     style={styles.friendsList}
@@ -2187,6 +2467,16 @@ export default FriendsScreen;
 //     color: '#fff',
 //     fontSize: 18,
 //     fontWeight: 'bold',
+//   },
+//   avatarImage: {
+//     width: 50,
+//     height: 50,
+//     borderRadius: 25,
+//     shadowColor: '#000',
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.2,
+//     shadowRadius: 3,
+//     elevation: 2,
 //   },
 //   friendInfo: {
 //     flex: 1,

@@ -4,7 +4,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/FontAwesome5';
-import { View, ActivityIndicator, AppState, Platform } from 'react-native';
+import { View, ActivityIndicator, AppState, Platform, PermissionsAndroid } from 'react-native';
+import Geolocation from '@react-native-community/geolocation'; // Ensure this is installed
 
 // Screens
 import HomeScreen from './src/homescreen';
@@ -46,7 +47,7 @@ import {
 } from './src/services/pushNotificationHelper';
 
 // Import socket service
-import { initSocket } from './src/services/socket';
+import { initSocket, emitLocationUpdate } from './src/services/socket';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -123,6 +124,7 @@ const AppNavigator = () => {
   const { user, loading } = useUser();
   const navigationRef = useRef(null);
   const [fcmInitialized, setFcmInitialized] = useState(false);
+  const appState = useRef(AppState.currentState);
 
   // Initialize FCM and Socket when user logs in
   useEffect(() => {
@@ -183,6 +185,75 @@ const AppNavigator = () => {
   useEffect(() => {
     if (!user) {
       setFcmInitialized(false);
+    }
+  }, [user]);
+
+  // --- LOCATION TRACKING LOGIC ---
+  useEffect(() => {
+    console.log('[APP] 📍 Initializing Location Tracking...');
+    let locationInterval;
+
+    const sendLocation = async () => {
+      if (!user) return;
+
+      // Check Android permissions first to avoid infinite loops/crashes
+      if (Platform.OS === 'android') {
+        try {
+          const granted = await PermissionsAndroid.check(
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+          );
+          if (!granted) {
+            console.log('[APP] 🚫 Location permission not granted. Skipping update.');
+            return;
+          }
+        } catch (err) {
+          console.warn('[APP] Error checking location permission:', err);
+          return;
+        }
+      }
+
+      Geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          console.log("My current location:", latitude, longitude);
+          
+          // Emit via Socket
+          emitLocationUpdate(latitude, longitude);
+        },
+        (error) => {
+          if (error.code === 1) {
+            console.log('[APP] 🚫 Location permission denied (Error 1).');
+          } else {
+            console.log('Location error:', error.code, error.message);
+          }
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+      );
+    };
+
+    if (user) {
+      // 1. Send immediately on open/login
+      sendLocation();
+
+      // 2. Send every 60 seconds
+      locationInterval = setInterval(sendLocation, 60000);
+
+      // 3. Handle App State Changes (Foreground/Background)
+      const subscription = AppState.addEventListener('change', nextAppState => {
+        if (
+          appState.current.match(/inactive|background/) &&
+          nextAppState === 'active'
+        ) {
+          console.log('App has come to the foreground! Sending location...');
+          sendLocation();
+        }
+        appState.current = nextAppState;
+      });
+
+      return () => {
+        if (locationInterval) clearInterval(locationInterval);
+        subscription.remove();
+      };
     }
   }, [user]);
 

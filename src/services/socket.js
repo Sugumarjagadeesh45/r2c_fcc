@@ -269,6 +269,17 @@ export const sendMessage = (recipientId, text, attachment = null) => {
   return true;
 };
 
+// Emit location update
+export const emitLocationUpdate = (latitude, longitude) => {
+  if (!socket || !socket.connected) {
+    // console.log('[Socket] ⚠️ Cannot emit location: Socket not connected');
+    return false;
+  }
+  // console.log(`[Socket] 📍 Emitting location: ${latitude}, ${longitude}`);
+  socket.emit('updateLocation', { latitude, longitude });
+  return true;
+};
+
 export const getSocketStatus = () => {
   if (!socket) {
     return {
@@ -409,4 +420,3 @@ export const testConnection = () => {
 //     socket.on('userStatus', handler);
 //   }
 // };
-
